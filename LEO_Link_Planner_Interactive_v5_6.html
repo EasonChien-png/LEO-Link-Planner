@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>LEO 連線預估觀測 v5.6｜Realistic Link Margin Planner</title>
+<style>
+  :root { --bg:#0b1020; --card:#111627; --ink:#e5e7eb; --muted:#94a3b8; --accent:#60a5fa; --ok:#34d399; --bad:#f87171; --warn:#f59e0b; }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",Arial}
+  header{padding:20px 24px; border-bottom:1px solid #1f2937}
+  h1{margin:0; font-size:22px; letter-spacing:.5px}
+  main{display:grid; grid-template-columns: 1fr; gap:18px; padding:12px}
+  @media(min-width:1000px){ main{grid-template-columns: 480px 1fr; padding:18px} }
+  .panel{background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:14px; box-shadow:0 6px 20px rgba(0,0,0,.25)}
+  .panel h2{font-size:16px; margin:4px 0 10px 0; color:#cbd5e1}
+  label{display:block; font-size:13px; color:var(--muted); margin:10px 0 6px}
+  input,select{width:100%; padding:12px 14px; background:#0f172a;border:1.5px solid #3b82f6; border-radius:12px; color:var(--ink); outline:none}
+  input::placeholder{color:#cbd5e1; opacity:.9}
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  @media(max-width:720px){ .row{grid-template-columns:1fr} }
+  .btn{background:#1e293b; color:#fff; border:1px solid #334155; border-radius:12px; padding:12px 14px; cursor:pointer}
+  .btn:hover{background:#0f172a}
+  .legend{display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 0}
+  .pill{padding:4px 10px; border-radius:999px; border:1px solid #334155; background:#0f172a; font-size:12px; white-space:nowrap}
+  .status{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  .stat{padding:6px 10px; border-radius:10px; border:1px solid #334155; background:#0f172a; font-size:12px; display:inline-flex; align-items:center; gap:6px}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  canvas{width:100%; height:560px; background:#0b1020; border-radius:12px; border:1px solid #1f2937}
+  footer{padding:10px 18px; color:#94a3b8}
+  .muted{color:#94a3b8; font-size:12px}
+  .note{margin-top:8px; font-size:12px; color:#a5b4fc}
+  .toolbar{display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap}
+  .switch{display:flex; align-items:center; gap:6px}
+  details{margin-top:10px}
+  summary{cursor:pointer; color:#93c5fd}
+  .kv{display:grid; grid-template-columns:160px 1fr; gap:6px; margin-top:6px; font-size:12px; color:#cbd5e1}
+  .kv div{padding:4px 8px; background:#0f172a; border:1px solid #334155; border-radius:8px}
+  .stack{display:flex; flex-direction:column; gap:8px}
+  .inlineBtns{display:flex; gap:8px; flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="pageTitle">LEO 連線預估觀測 v5.6｜Link Margin (Eb/N0) 實務版</h1>
+  <div class="muted">行動版修正：城市輸入欄位改為「獨立一行、全寬、高對比邊框與提示字」。距離愈遠 → dB 愈小；功率愈大 → dB 上升。</div>
+</header>
+
+<main>
+  <section class="panel" id="controls">
+    <h2>參數設定</h2>
+    <div class="status" id="netStatus"></div>
+    <div class="status" id="linkStatus"></div>
+
+    <label>專案名稱（檔名前綴 / 也會顯示於頁面標題）</label>
+    <input id="projName" type="text" value="LEO_LinkTest" placeholder="例如：Eason_LEO_LinkTest"/>
+
+    <label>模式 Mode</label>
+    <select id="mode">
+      <option value="weather" selected>天氣情境比較（自定 + 晴天/陰天/大雨）</option>
+      <option value="bitrate">×速率比較（自定天氣下比 3 檔資料率）</option>
+    </select>
+
+    <div class="row">
+      <div>
+        <label>最大斜距上限 (km) ≤ 2000（起點固定 600）</label>
+        <input id="maxRange" type="number" value="2000" min="600" max="2000" step="10"/>
+      </div>
+      <div>
+        <label>掃描點數（解析度）</label>
+        <input id="npts" type="number" value="300" min="50" max="1500" step="10"/>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>TX Power 發射功率 (W)</label>
+        <input id="txPower" type="number" value="3.0" min="0.05" max="20" step="0.1"/>
+      </div>
+      <div>
+        <label>接收機雜訊圖 NF (dB)</label>
+        <input id="nf" type="number" value="1.0" min="0.3" max="5" step="0.1"/>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Tx Antenna Gain (dBi)</label>
+        <input id="gtx" type="number" value="8.0" min="0" max="25" step="0.5"/>
+      </div>
+      <div>
+        <label>Rx Antenna Gain (dBi)</label>
+        <input id="grx" type="number" value="18.0" min="0" max="30" step="0.5"/>
+      </div>
+    </div>
+
+    <div id="weatherBox">
+      <div class="row">
+        <div>
+          <label>天氣衰減 Weather Attn (dB)</label>
+          <input id="wAttn" type="number" value="0.5" min="0" max="15" step="0.1"/>
+        </div>
+        <div>
+          <label>天空溫度 Sky Temp (K)</label>
+          <input id="skyT" type="number" value="260" min="200" max="700" step="10"/>
+        </div>
+      </div>
+      <div class="note">參考：晴天 0–1 dB / 260–300 K；陰天 1–2 dB / 300–350 K；大雨 3–6 dB / 400–600 K</div>
+
+      <div class="stack" style="margin-top:6px">
+        <label>請輸入城市名稱（可中文或英文，如：台北 或 Taipei）</label>
+        <input id="city" type="text" placeholder="例：Taipei、Hsinchu、Tokyo、Los Angeles"/>
+        <div class="inlineBtns">
+          <button class="btn" id="fetchCity">查城市天氣</button>
+          <button class="btn" id="useHere">使用我的位置</button>
+        </div>
+      </div>
+      <div id="wxInfo" class="muted" style="margin-top:8px">—</div>
+    </div>
+
+    <div id="bitrateBox" style="display:none">
+      <label>Bit Rates (bps) — 用逗號分隔三檔</label>
+      <input id="rates" type="text" value="9600, 38400, 192000"/>
+    </div>
+
+    <div id="singleRateBox">
+      <label>單一 Bit Rate（僅天氣模式使用）</label>
+      <input id="singleRate" type="number" value="9600" min="1200" max="1000000" step="600"/>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn" id="run">繪製</button>
+      <label class="switch">
+        <input id="autoupdate" type="checkbox" checked/>
+        <span class="muted">即時更新</span>
+      </label>
+      <button class="btn" id="reset">重設參數</button>
+      <button class="btn" id="dlCsv">匯出 CSV</button>
+      <button class="btn" id="dlPng">下載 PNG</button>
+      <span id="status" class="muted">—</span>
+    </div>
+
+    <div class="muted" style="margin-top:6px">
+      分享連結（自動更新）：<span id="shareUrl" style="word-break:break-all;color:#93c5fd"></span>
+    </div>
+
+    <details>
+      <summary>🔎 物理 sanity 檢查（距離與功率方向）</summary>
+      <div class="kv" id="sanity"></div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <h2 id="chartTitle">天氣情境比較</h2>
+    <div class="legend" id="legend"></div>
+    <canvas id="plot" width="1200" height="560"></canvas>
+    <div class="muted" style="margin-top:8px">虛線為 0 dB（臨界門檻）。紅色半透明區：超出此距離後最少一條曲線無法通訊。</div>
+  </section>
+</main>
+
+<footer class="muted">
+  固定值：頻率 437.5 MHz（UHF）、Tx 線損 0.5 dB、其他損耗 2 dB、需求門檻 Req Eb/N0 = 9.6 dB。
+</footer>
+
+<script>
+// ---- 常數與工具 ----
+const K = 1.380649e-23;
+const F_MHZ = 437.5;
+const TX_LINE_dB = 0.5;
+const MISC_BASE_dB = 2.0;
+const REQ_EBN0_dB = 9.6;
+const COLORS = ["#60a5fa","#f59e0b","#22c55e","#e879f9","#f87171","#34d399"];
+const linspace = (a,b,n)=>Array.from({length:n},(_,i)=>a+(b-a)*i/(n-1));
+const dB = (x)=>10*Math.log10(x);
+// 標準 FSPL（MHz, km）
+const fspl_dB = (f_mhz, d_km)=> 32.44 + 20*Math.log10(f_mhz) + 20*Math.log10(d_km);
+const noiseTempFromNF = (nf_dB, Tref=290)=> Tref*(Math.pow(10,nf_dB/10)-1);
+const systemTempK = (nf_dB, skyK, Tmisc=0, Tref=290)=> skyK + noiseTempFromNF(nf_dB,Tref) + Tmisc;
+const gOverT_dBperK = (g_dBi, TsysK)=> g_dBi - 10*Math.log10(TsysK);
+
+function val(id){ const el=document.getElementById(id); return el.type==='number'? +el.value : el.value }
+function setVal(id, v){ const el=document.getElementById(id); el.value = v }
+function sanitizeName(s){
+  return (s||'').trim().replace(/[\s\/\\:*?"<>|]+/g,'_').replace(/_+/g,'_').replace(/^_+|_+$/g,'');
+}
+
+function updateShareUrl(){
+  const params = new URLSearchParams();
+  ['projName','mode','maxRange','npts','txPower','nf','gtx','grx','wAttn','skyT','rates','singleRate','autoupdate'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    if(el.type==='checkbox'){ params.set(id, el.checked? '1':'0'); }
+    else { params.set(id, el.value); }
+  });
+  const url = location.origin + location.pathname + '?' + params.toString();
+  document.getElementById('shareUrl').textContent = url;
+  document.getElementById('pageTitle').textContent = `LEO 連線預估觀測 v5.6｜${sanitizeName(val('projName')) || 'Link Margin (Eb/N0) 實務版'}`;
+  document.title = `LEO v5.6｜${sanitizeName(val('projName')) || 'LEO Link Planner'}`;
+  history.replaceState(null, '', url);
+}
+function readParams(){
+  const q = new URLSearchParams(location.search);
+  const get = (k, d=null)=> q.has(k)? q.get(k): d;
+  ['projName','mode','maxRange','npts','txPower','nf','gtx','grx','wAttn','skyT','rates','singleRate'].forEach(k=>{
+    const v=get(k); if(v!==null) setVal(k, v);
+  });
+  const a = get('autoupdate'); if(a!==null) document.getElementById('autoupdate').checked = (a==='1');
+}
+
+// ---- 天氣（Open‑Meteo） ----
+async function geocodeCity(name){
+  name = (name||'').trim().replace(/\s+/g,' ');
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=zh-TW`;
+  const r = await fetch(url); if(!r.ok) throw new Error('geocode failed');
+  const j = await r.json();
+  if(!j.results || !j.results.length) throw new Error('找不到城市');
+  const g = j.results[0];
+  return {lat:g.latitude, lon:g.longitude, label:`${g.name}${g.admin1? ' · '+g.admin1:''} ${g.country_code||''}`};
+}
+async function fetchWeather(lat, lon){
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,precipitation,cloud_cover&timezone=auto`;
+  const r = await fetch(url); if(!r.ok) throw new Error('weather failed');
+  const j = await r.json();
+  return j.current;
+}
+function mapWeatherToParams(wx){
+  const cc = wx.cloud_cover ?? 0;        // %
+  const pr = wx.precipitation ?? 0;      // mm/h
+  const attn = Math.min(0.2 + 0.05*pr + (cc>80?0.2:0.0), 6.0); // dB（UHF 雨衰很小，係數可調小）
+  const sky = Math.min(240 + 0.8*cc + (pr>5?80:0) , 600);      // K
+  return {attn, sky, cc, pr, temp: wx.temperature_2m};
+}
+
+// ---- 繪圖 ----
+function plotCurves(canvas, series, title, criticalMin=null){
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const l=70, r=20, t=46, b=56;
+  let xmin=Infinity, xmax=-Infinity, ymin=Infinity, ymax=-Infinity;
+  series.forEach(s=>s.xy.forEach(([x,y])=>{ xmin=Math.min(xmin,x); xmax=Math.max(xmax,x); ymin=Math.min(ymin,y); ymax=Math.max(ymax,y) }));
+  ymin = Math.min(ymin, -5); ymax = Math.max(ymax, 30);
+
+  // grid
+  ctx.strokeStyle="#243044"; ctx.lineWidth=1;
+  for(let i=0;i<=6;i++){ const yy = t + (H-t-b)*i/6; ctx.beginPath(); ctx.moveTo(l,yy); ctx.lineTo(W-r,yy); ctx.stroke(); }
+  for(let i=0;i<=8;i++){ const xx = l + (W-l-r)*i/8; ctx.beginPath(); ctx.moveTo(xx,t); ctx.lineTo(xx,H-b); ctx.stroke(); }
+
+  // axes
+  ctx.strokeStyle="#48566e"; ctx.lineWidth=1.5; ctx.strokeRect(l,t,W-l-r,H-t-b);
+
+  // 0 dB line
+  const y0 = H-b - (0 - ymin)/(ymax-ymin)*(H-t-b);
+  ctx.setLineDash([6,6]); ctx.strokeStyle="#7c8aa5"; ctx.beginPath(); ctx.moveTo(l,y0); ctx.lineTo(W-r,y0); ctx.stroke(); ctx.setLineDash([]);
+
+  // labels
+  ctx.fillStyle="#cbd5e1"; ctx.font="13px system-ui"; ctx.fillText("Slant Range [km]", l+(W-l-r)/2-60, H-16);
+  ctx.save(); ctx.translate(18, t+(H-t-b)/2+50); ctx.rotate(-Math.PI/2); ctx.fillText("Link Margin (Eb/N0) [dB]  ↑ 較大", 0,0); ctx.restore();
+  ctx.font="16px system-ui"; ctx.fillText(title, l, 26);
+
+  // y-ticks（上大下小）
+  ctx.fillStyle="#94a3b8"; ctx.font="12px system-ui";
+  for(let i=0;i<=6;i++){
+    const val = (ymax - (ymax-ymin)*i/6).toFixed(0);
+    const yy = t + (H-t-b)*i/6;
+    ctx.fillText(val, 36, yy+4);
+  }
+  // x-ticks
+  for(let i=0;i<=8;i++){
+    const val = (xmin + (xmax-xmin)*i/8).toFixed(0);
+    const xx = l + (W-l-r)*i/8;
+    ctx.fillText(val, xx-12, H-22);
+  }
+
+  // shaded no-comm region
+  if(criticalMin!==null){
+    const xx = l + (criticalMin - xmin)/(xmax-xmin)*(W-l-r);
+    ctx.fillStyle="rgba(248,113,113,0.12)";
+    ctx.fillRect(xx, t, (W-r)-xx, (H-t-b));
+  }
+
+  // series curves
+  series.forEach((s,si)=>{
+    const color = s.color || COLORS[si%COLORS.length];
+    ctx.strokeStyle = color; ctx.lineWidth=2; ctx.beginPath();
+    s.xy.forEach(([x,y],i)=>{
+      const xx = l + (x - xmin)/(xmax-xmin)*(W-l-r);
+      const yy = H-b - (y - ymin)/(ymax-ymin)*(H-t-b);
+      if(i===0) ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy);
+    }); ctx.stroke();
+
+    // end labels
+    const [xe, ye] = s.xy[s.xy.length-1];
+    const xxe = l + (xe - xmin)/(xmax-xmin)*(W-l-r);
+    const yye = H-b - (ye - ymin)/(ymax-ymin)*(H-t-b);
+    ctx.fillStyle=color; ctx.font="12px system-ui"; ctx.fillText("  "+s.displayLabel, xxe+6, yye+4);
+
+    // vertical line at individual critical distance
+    if(s.crit!==null){
+      const v = l + (s.crit - xmin)/(xmax-xmin)*(W-l-r);
+      ctx.setLineDash([4,8]); ctx.strokeStyle=color; ctx.beginPath(); ctx.moveTo(v,t); ctx.lineTo(v,H-b); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=color; ctx.font="11px system-ui"; ctx.fillText(`0 dB@${s.crit.toFixed(0)}km`, v+4, t+14);
+    }
+  });
+}
+
+// 線性內插找臨界距離
+function critDist(xy){
+  for(let i=1;i<xy.length;i++){
+    const [x1,y1]=xy[i-1], [x2,y2]=xy[i];
+    if((y1>=0 && y2<=0) || (y1<=0 && y2>=0)){
+      const t=(0-y1)/(y2-y1); return x1 + t*(x2-x1);
+    }
+  }
+  return null;
+}
+
+// 主計算 + 狀態 + sanity
+function computeAndDraw(){
+  const now = new Date().toLocaleTimeString();
+  document.getElementById('status').textContent = `已更新 ${now}`;
+
+  const mode = document.getElementById('mode').value;
+  const maxRange = Math.min(2000, Math.max(600, +val('maxRange')||2000));
+  const npts = Math.max(50, Math.min(1500, parseInt(val('npts'))||300));
+  const txP = +val('txPower') || 3.0;
+  const nf = +val('nf') || 1.0;
+  const gtx = +val('gtx') || 8.0;
+  const grx = +val('grx') || 18.0;
+  const wAttn = +val('wAttn') || 0.5;
+  const skyT = +val('skyT') || 260.0;
+  const rates = (val('rates')||"9600,38400,192000").split(',').map(s=>+s.trim()).filter(x=>x>0);
+  const singleRate = +val('singleRate') || 9600;
+
+  const dKm = linspace(600, maxRange, npts);
+  const Lfs = dKm.map(km=> fspl_dB(F_MHZ, km)); // dB
+  const EIRP_dBW = dB(txP) + gtx - TX_LINE_dB;
+
+  function cn0_common(attn_db, sky_k){
+    const Tsys = systemTempK(nf, sky_k, 0.0, 290.0);
+    const GT = gOverT_dBperK(grx, Tsys);
+    return Lfs.map(L => EIRP_dBW + GT - (L + MISC_BASE_dB + attn_db) - 10*Math.log10(K)); // dB-Hz
+  }
+
+  const legend = document.getElementById('legend'); legend.innerHTML = "";
+  const linkStatus = document.getElementById('linkStatus'); linkStatus.innerHTML = "";
+  const series = [];
+  let critMin = null;
+
+  if(mode==="weather"){
+    document.getElementById('chartTitle').textContent = "天氣情境比較";
+    const presets = [
+      {displayLabel:"自定義 Custom", csvLabel:"Custom", attn:wAttn, sky:skyT, color:COLORS[0]},
+      {displayLabel:"晴天 Clear",    csvLabel:"Clear",  attn:0.5, sky:260, color:COLORS[1]},
+      {displayLabel:"陰天 Overcast", csvLabel:"Overcast", attn:1.5, sky:330, color:COLORS[2]},
+      {displayLabel:"大雨 HeavyRain",csvLabel:"HeavyRain", attn:5.0, sky:480, color:COLORS[3]},
+    ];
+    presets.forEach((p)=>{
+      const CNo = cn0_common(p.attn, p.sky);
+      const EbN0 = CNo.map(v => v - 10*Math.log10(singleRate));
+      const margin = EbN0.map(v => v - REQ_EBN0_dB);
+      const xy = dKm.map((x,i)=>[x, margin[i]]);
+      const d0 = critDist(xy);
+      if(d0!==null){ critMin = (critMin===null)? d0 : Math.min(critMin, d0); }
+      series.push({displayLabel:p.displayLabel, csvLabel:p.csvLabel, xy, color:p.color, crit:d0});
+      const tag = document.createElement('div'); tag.className='pill';
+      tag.textContent = `${p.displayLabel} · Attn ${p.attn} dB · Sky ${p.sky} K · ${d0?('臨界 '+d0.toFixed(0)+' km'):'臨界 > '+maxRange+' km'}`;
+      legend.appendChild(tag);
+    });
+  }else{
+    document.getElementById('chartTitle').textContent = "×速率比較";
+    const CNo = cn0_common(wAttn, skyT);
+    rates.slice(0,3).forEach((R, idx)=>{
+      const EbN0 = CNo.map(v => v - 10*Math.log10(R));
+      const margin = EbN0.map(v => v - REQ_EBN0_dB);
+      const xy = dKm.map((x,i)=>[x, margin[i]]);
+      const d0 = critDist(xy);
+      if(d0!==null){ critMin = (critMin===null)? d0 : Math.min(critMin, d0); }
+      const label = `${R.toLocaleString()} bps`;
+      series.push({displayLabel:label, csvLabel:label.replace(/\s/g,'') , xy, color:COLORS[idx%COLORS.length], crit:d0});
+      const tag = document.createElement('div'); tag.className='pill';
+      tag.textContent = `${label} · ${d0?('臨界 '+d0.toFixed(0)+' km'):'臨界 > '+maxRange+' km'}`;
+      legend.appendChild(tag);
+    });
+    const env = document.createElement('div'); env.className='pill';
+    env.textContent = `Weather Attn ${wAttn} dB · Sky ${skyT} K`; legend.appendChild(env);
+  }
+
+  // 畫圖
+  plotCurves(document.getElementById('plot'), series, (mode==="weather"?"天氣情境比較":"×速率比較")+"：Eb/N0 餘裕 vs 距離", critMin);
+  window._lastSeries = series;
+
+  // 側邊通訊狀態
+  const worstMargin = series.reduce((acc, s)=> Math.min(acc, s.xy[s.xy.length-1][1]), +Infinity);
+  const box = document.createElement('div'); box.className='stat';
+  if(worstMargin>0){
+    box.innerHTML = `<span class="ok">🟢</span> 目前最遠距離仍可穩定通訊（Margin = ${worstMargin.toFixed(1)} dB）`;
+  }else{
+    box.innerHTML = `<span class="bad">🔴</span> 超過某距離後無法通訊（請參考圖上紅色區域與垂直線）`;
+  }
+  linkStatus.appendChild(box);
+
+  // ---- Sanity Panel ----
+  const sanity = document.getElementById('sanity');
+  const s0 = series[0];
+  if(s0){
+    const m600 = s0.xy[0][1];
+    const mMax = s0.xy[s0.xy.length-1][1];
+    const EIRP_now = dB(+val('txPower')) + (+val('gtx')) - TX_LINE_dB;
+    const EIRP_2x = dB(+val('txPower')*2) + (+val('gtx')) - TX_LINE_dB;
+    const deltaP = EIRP_2x - EIRP_now; // ≈ 3 dB
+    sanity.innerHTML = `
+      <div>FSPL(600km) / FSPL(${maxRange}km)</div><div>${fspl_dB(F_MHZ, 600).toFixed(2)} dB → ${fspl_dB(F_MHZ, maxRange).toFixed(2)} dB</div>
+      <div>Margin@600km（代表曲線）</div><div>${m600.toFixed(2)} dB（應 ≥ 末端）</div>
+      <div>Margin@${maxRange}km（代表曲線）</div><div>${mMax.toFixed(2)} dB（應 ≤ 起點）</div>
+      <div>功率翻倍（P→2P）理論影響</div><div>+${deltaP.toFixed(2)} dB（曲線應往正向位移）</div>
+    `;
+  }
+
+  updateShareUrl();
+}
+
+// 匯出（CSV/PNG）
+function download(filename, content, mime){
+  const blob = new Blob([content], {type: mime});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function toCSV(series){
+  const distances = series[0]?.xy.map(p=>p[0].toFixed(2)) || [];
+  const header = ['distance_km', ...series.map(s=>s.csvLabel.replace(/,/g,' '))];
+  const rows = [header.join(',')];
+  for(let i=0;i<distances.length;i++){
+    const cols = [distances[i], ...series.map(s=> s.xy[i][1].toFixed(3))];
+    rows.push(cols.join(','));
+  }
+  return rows.join('\n');
+}
+function timestamp(){
+  const d = new Date();
+  const pad = n=> String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`;
+}
+function filenamePrefix(){
+  const p = sanitizeName(val('projName'));
+  return p ? p : 'LEO_Link';
+}
+document.getElementById('dlCsv').addEventListener('click', ()=>{
+  const series = window._lastSeries || [];
+  const mode = document.getElementById('mode').value;
+  const name = `${filenamePrefix()}_${mode==='weather' ? 'weather' : 'bitrate'}_${timestamp()}.csv`;
+  const csv = toCSV(series);
+  download(name, '\ufeff'+csv, 'text/csv;charset=utf-8');
+});
+document.getElementById('dlPng').addEventListener('click', ()=>{
+  const canvas = document.getElementById('plot');
+  const url = canvas.toDataURL('image/png');
+  const mode = document.getElementById('mode').value;
+  const name = `${filenamePrefix()}_${mode==='weather' ? 'weather' : 'bitrate'}_${timestamp()}.png`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+});
+
+// 自動更新與重設
+function bindAutoUpdate(){
+  const ids = ["projName","mode","maxRange","npts","txPower","nf","gtx","grx","wAttn","skyT","rates","singleRate","autoupdate"];
+  const handler = ()=>{ if(document.getElementById('autoupdate').checked){ computeAndDraw(); } updateShareUrl(); };
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', handler);
+    el.addEventListener('change', handler);
+  });
+}
+document.getElementById('reset').addEventListener('click', ()=>{
+  setVal('projName','LEO_LinkTest');
+  setVal('mode','weather'); setVal('maxRange',2000); setVal('npts',300);
+  setVal('txPower',3.0); setVal('nf',1.0); setVal('gtx',8.0); setVal('grx',18.0);
+  setVal('wAttn',0.5); setVal('skyT',260);
+  setVal('rates','9600,38400,192000'); setVal('singleRate',9600);
+  document.getElementById('autoupdate').checked = true;
+  computeAndDraw();
+  updateShareUrl();
+});
+
+document.getElementById('mode').addEventListener('change',(e)=>{
+  const mode=e.target.value;
+  document.getElementById('bitrateBox').style.display = (mode==='bitrate')?'block':'none';
+  document.getElementById('singleRateBox').style.display = (mode==='weather')?'block':'none';
+});
+document.getElementById('run').addEventListener('click', ()=>{ computeAndDraw(); updateShareUrl(); });
+
+// 網路狀態
+function renderNetStatus(){
+  const wrap = document.getElementById('netStatus'); wrap.innerHTML="";
+  const box = document.createElement('div'); box.className='stat';
+  if(navigator.onLine){
+    box.innerHTML = `<span class="ok">🌍</span> 已連線網際網路（自動天氣可用）`;
+  }else{
+    box.innerHTML = `<span class="warn">⚠️</span> 離線狀態：無法更新天氣資料`;
+  }
+  wrap.appendChild(box);
+}
+window.addEventListener('online', renderNetStatus);
+window.addEventListener('offline', renderNetStatus);
+
+// ---- 事件：查城市天氣 ----
+document.getElementById('fetchCity').addEventListener('click', async ()=>{
+  const cityRaw = document.getElementById('city').value;
+  const info = document.getElementById('wxInfo');
+  if(!cityRaw || !cityRaw.trim()){ info.textContent='請輸入城市名稱'; return; }
+  if(!navigator.onLine){ info.textContent='目前離線，無法查詢天氣'; return; }
+  try{
+    info.textContent='查詢城市座標…';
+    const g = await geocodeCity(cityRaw);
+    info.textContent=`${g.label}：取得即時天氣…`;
+    const wx = await fetchWeather(g.lat, g.lon);
+    const m = mapWeatherToParams(wx);
+    setVal('wAttn', m.attn.toFixed(2));
+    setVal('skyT', Math.round(m.sky));
+    info.textContent = `${g.label} → 降水 ${m.pr} mm/h，雲量 ${m.cc}%，地面溫度 ${m.temp}°C → 建議 Attn ${m.attn.toFixed(2)} dB / Sky ${Math.round(m.sky)} K`;
+    computeAndDraw();
+  }catch(err){
+    info.textContent='查詢失敗：'+(err.message||err);
+  }
+});
+
+// ---- 事件：使用我的位置（按了才定位） ----
+document.getElementById('useHere').addEventListener('click', ()=>{
+  const info = document.getElementById('wxInfo');
+  if(!navigator.onLine){ info.textContent='目前離線，無法查詢天氣'; return; }
+  if(!navigator.geolocation){ info.textContent='你的瀏覽器不支援地理定位'; return; }
+  info.textContent = '定位中…請在瀏覽器允許定位權限';
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    try{
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      info.textContent = `已取得座標（${lat.toFixed(4)}, ${lon.toFixed(4)}），查詢即時天氣…`;
+      const wx = await fetchWeather(lat, lon);
+      const m = mapWeatherToParams(wx);
+      setVal('wAttn', m.attn.toFixed(2));
+      setVal('skyT', Math.round(m.sky));
+      info.textContent = `我的位置 → 降水 ${m.pr} mm/h，雲量 ${m.cc}%，地面溫度 ${m.temp}°C → 建議 Attn ${m.attn.toFixed(2)} dB / Sky ${Math.round(m.sky)} K`;
+      computeAndDraw();
+    }catch(err){
+      info.textContent='定位成功但查天氣失敗：'+(err.message||err);
+    }
+  }, err=>{
+    const code = err && err.code;
+    if(code===1) info.textContent = '你拒絕了定位權限（可改按「查城市天氣」）';
+    else if(code===2) info.textContent = '無法取得位置（可能 GPS 關閉或網路不穩）';
+    else if(code===3) info.textContent = '定位逾時，請重試';
+    else info.textContent = '定位失敗：'+err.message;
+  }, {enableHighAccuracy:false, timeout:10000, maximumAge:300000});
+});
+
+// 初始化
+renderNetStatus();
+readParams();
+bindAutoUpdate();
+computeAndDraw();
+updateShareUrl();
+</script>
+</body>
+</html>
