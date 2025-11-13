@@ -351,9 +351,9 @@ function computeAndDraw(){
     document.getElementById('chartTitle').textContent = "天氣情境比較";
     const presets = [
       {displayLabel:"自定義 Custom", csvLabel:"Custom", attn:wAttn, sky:skyT, color:COLORS[0]},
-      {displayLabel:"晴天 Clear",    csvLabel:"Clear",  attn:0.5, sky:260, color:COLORS[1]},
-      {displayLabel:"陰天 Overcast", csvLabel:"Overcast", attn:1.5, sky:330, color:COLORS[2]},
-      {displayLabel:"大雨 HeavyRain",csvLabel:"HeavyRain", attn:5.0, sky:480, color:COLORS[3]},
+      {displayLabel:"晴天 Clear",    csvLabel:"Clear",  attn:0.1, sky:260, color:COLORS[1]},
+      {displayLabel:"陰天 Overcast", csvLabel:"Overcast", attn:0.4, sky:330, color:COLORS[2]},
+      {displayLabel:"大雨 HeavyRain",csvLabel:"HeavyRain", attn:2.5, sky:480, color:COLORS[3]},
     ];
     presets.forEach((p)=>{
       const CNo = cn0_common(p.attn, p.sky);
