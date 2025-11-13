@@ -105,10 +105,10 @@
           <input id="skyT" type="number" value="260" min="200" max="700" step="10"/>
         </div>
       </div>
-      <div class="note">參考：晴天 0–1 dB / 260–300 K；陰天 1–2 dB / 300–350 K；大雨 3–6 dB / 400–600 K</div>
+      <div class="note">參考：晴天 0.1 dB / 260–300 K；陰天 0.3 dB / 300–350 K；大雨 2.5 dB / 400–600 K</div>
 
       <div class="stack" style="margin-top:6px">
-        <label>請輸入城市名稱（可中文或英文，如：台北 或 Taipei）</label>
+        <label>請輸入城市名稱（英文，如：台北 或 Taipei）</label>
         <input id="city" type="text" placeholder="例：Taipei、Hsinchu、Tokyo、Los Angeles"/>
         <div class="inlineBtns">
           <button class="btn" id="fetchCity">查城市天氣</button>
@@ -236,7 +236,7 @@ function plotCurves(canvas, series, title, criticalMin=null){
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0,0,W,H);
-  const l=70, r=20, t=46, b=90;
+  const l=70, r=90, t=46, b=56;
   let xmin=Infinity, xmax=-Infinity, ymin=Infinity, ymax=-Infinity;
   series.forEach(s=>s.xy.forEach(([x,y])=>{ xmin=Math.min(xmin,x); xmax=Math.max(xmax,x); ymin=Math.min(ymin,y); ymax=Math.max(ymax,y) }));
   ymin = Math.min(ymin, -5); ymax = Math.max(ymax, 30);
