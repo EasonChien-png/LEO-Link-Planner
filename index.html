@@ -236,7 +236,7 @@ function plotCurves(canvas, series, title, criticalMin=null){
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0,0,W,H);
-  const l=70, r=20, t=46, b=56;
+  const l=70, r=20, t=46, b=90;
   let xmin=Infinity, xmax=-Infinity, ymin=Infinity, ymax=-Infinity;
   series.forEach(s=>s.xy.forEach(([x,y])=>{ xmin=Math.min(xmin,x); xmax=Math.max(xmax,x); ymin=Math.min(ymin,y); ymax=Math.max(ymax,y) }));
   ymin = Math.min(ymin, -5); ymax = Math.max(ymax, 30);
